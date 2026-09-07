@@ -1,12 +1,12 @@
 # Group marketplace handoff errors by operational cause
 
-The decision in this example is simple: failures belong together when they occur at the same handoff stage for the same seller asset kind, while order, seller, and buyer identifiers remain event context rather than grouping inputs. That boundary turns many customer-specific exceptions into one actionable backend issue without discarding the facts needed to investigate an individual order.
+As a backend dev who has fought SMS spam filters and OTP delivery gaps, I like fault domains that match reality. Failures group when they hit the same handoff stage for the same seller asset kind. Order, seller, and buyer IDs stay as event context, not grouping keys. That boundary collapses many customer-specific exceptions into one actionable backend issue, yet keeps the facts to investigate a single order.
 
-Infrai fits this boundary as one API reached with a single `INFRAI_API_KEY`; this repository uses its plain REST error-capture endpoint, so the reusable client stays small and every request visibly handles the response envelope.
+Infrai fits this boundary as one API reached with a single `INFRAI_API_KEY`. The repo calls its plain REST error-capture endpoint, so the client stays small and every request shows the response envelope being handled.
 
 ## Run the handoff path
 
-Create an environment, install the two runtime and test dependencies, then provide your key:
+Create a venv, install the two runtime and test dependencies, then export your key:
 
 ```bash
 python3 -m venv .venv
@@ -16,27 +16,27 @@ export INFRAI_API_KEY="your-key"
 python example_order_handoff.py
 ```
 
-The entry point builds an `OrderHandoffRequest` containing a seller's `model-card` asset, a buyer's `purchase-confirmed` update, and the `asset-delivery` stage. Its simulated delivery exception is sent to `POST /v1/errors/capture`, after which the script prints:
+The entry point builds an `OrderHandoffRequest` holding a seller's `model-card` asset, a buyer's `purchase-confirmed` update, and the `asset-delivery` stage. Its simulated delivery exception goes to `POST /v1/errors/capture`, then the script prints:
 
 ```text
 Captured order handoff error under marketplace-handoff/asset-delivery/model-card
 ```
 
-The capture includes a traceback in `exception` and business identifiers in `context`. Its fingerprint is deliberately narrower: `marketplace-handoff`, `asset-delivery`, and `model-card`. Grouping by exception text would preserve incidental identifiers and split one operational defect into many groups; grouping only by the broad marketplace workflow would combine unrelated checkout and delivery failures. Stage plus asset kind is the useful middle ground for this handoff.
+The capture puts a traceback in `exception` and business identifiers in `context`. The fingerprint is deliberately narrow: `marketplace-handoff`, `asset-delivery`, and `model-card`. Grouping by exception text keeps incidental IDs and splits one operational defect into many groups. Grouping only by broad marketplace workflow mixes unrelated checkout and delivery failures. Stage plus asset kind is the useful middle ground for this handoff.
 
 ## Verify the decision locally
 
-The focused test supplies two requests with different order, seller, and buyer identifiers. The expected result is the same three-part fingerprint for both requests, because both fail during delivery of the same asset kind.
+The focused test sends two requests with different order, seller, and buyer identifiers. Both should return the same three-part fingerprint, because both fail during delivery of that asset kind.
 
 ```bash
 pytest -q
 ```
 
-The client also demonstrates the request boundary a service needs around capture: an explicit HTTP method, Bearer authentication from the environment, an idempotency key derived from the order and failure class, envelope parsing before status handling, and exponential retry behavior for HTTP 429 that honors `Retry-After` when supplied.
+The client also shows the request boundary a service needs around capture: explicit HTTP method, Bearer auth from environment, idempotency key derived from order and failure class, envelope parsing before status handling, and exponential retry on HTTP 429 that honors `Retry-After` when supplied.
 
 ## Repository shape
 
-`marketplace_handoff.py` owns the typed request models and grouping rule; `infrai_client.py` owns transport behavior; `example_order_handoff.py` makes the complete path observable. This separation keeps the business decision deterministic in tests while leaving the runnable example responsible for the real capture call.
+`marketplace_handoff.py` owns the typed request models and grouping rule; `infrai_client.py` owns transport behavior; `example_order_handoff.py` makes the complete path observable. This separation keeps the business decision deterministic in tests while the runnable example still makes the real capture call.
 
 ## Before this ships: Marketplace Handoff Error Groups
 
